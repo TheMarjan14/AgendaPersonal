@@ -225,17 +225,6 @@
                         cloudHitos.push({ id: doc.id, ...doc.data() });
                     });
                     gameState.hitos = cloudHitos;
-                    if (gameState.hitos.length === 0) {
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        saveHitoToCloud({
-                            title: '¡Bienvenido a HitoQuest Cloud!',
-                            description: 'Tus hitos sincronizados en la nube en tiempo real.',
-                            date: todayStr,
-                            time: '10:00',
-                            category: 'Personal',
-                            completed: false
-                        });
-                    }
                     updateSyncStatus(true, "Nube sincronizada en tiempo real");
                     renderCalendar();
                 }, (error) => {
@@ -256,10 +245,7 @@
                 if (saved) {
                     gameState.hitos = JSON.parse(saved);
                 } else {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    gameState.hitos = [
-                        { id: 'h_local_1', title: 'Hito local de respaldo', description: 'Revisa tus reglas en Firebase si deseas nube', date: todayStr, time: '09:00', category: 'Personal', completed: false }
-                    ];
+                    gameState.hitos = [];
                 }
                 renderCalendar();
             } catch(err) {
