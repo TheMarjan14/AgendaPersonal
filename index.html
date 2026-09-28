@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HitoQuest Calendar - Sincronización Cloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- Firebase Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Poppins', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(124, 58, 237, 0.1); }
+        ::-webkit-scrollbar-thumb { background: #7c3aed; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-[#0b0813] dark:bg-[#0b0813] text-slate-100 min-h-screen flex flex-col selection:bg-purple-500 selection:text-white transition-colors duration-300">
+
+    <header class="bg-[#151025]/90 dark:bg-[#151025]/90 bg-white/90 backdrop-blur-md border-b border-purple-900/40 dark:border-purple-900/40 border-slate-200 sticky top-0 z-40 shadow-xl transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
+            
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 p-0.5 shadow-lg shadow-purple-500/30 flex items-center justify-center">
+                    <div class="w-full h-full bg-[#151025] dark:bg-[#151025] bg-slate-900 rounded-[14px] flex items-center justify-center text-purple-400 text-xl font-bold">
+                        <i class="fa-solid fa-cloud-bolt"></i>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-sm sm:text-base font-extrabold tracking-wide bg-gradient-to-r from-purple-400 to-indigo-300 bg-clip-text text-transparent">HITOQUEST CLOUD</h1>
+                    <p class="text-[11px] text-purple-300/80 flex items-center gap-1.5">
+                        <span id="sync-status" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span id="sync-text">Conectando a la nube...</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <button id="btn-toggle-theme" title="Cambiar Tema" class="w-10 h-10 rounded-2xl bg-[#1a1429] dark:bg-[#1a1429] bg-slate-100 border border-purple-900/50 flex items-center justify-center text-purple-300 hover:bg-purple-900/40 transition">
+                    <i class="fa-solid fa-moon dark:hidden"></i>
+                    <i class="fa-solid fa-sun hidden dark:inline text-amber-400"></i>
+                </button>
+                <button id="btn-export-pdf" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-3 sm:px-4 py-2.5 rounded-2xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition transform active:scale-95 items-center space-x-2">
+                    <i class="fa-solid fa-file-pdf"></i>
+                    <span class="hidden sm:inline">Exportar Semana PDF</span>
+                </button>
+                <button id="btn-open-new-hito" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-2xl text-xs font-bold shadow-lg shadow-purple-600/30 transition transform active:scale-95 flex items-center space-x-2">
+                    <i class="fa-solid fa-plus"></i>
+                    <span class="hidden sm:inline">Nuevo Hito</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none"></div>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+
+        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-purple-900/40 dark:border-purple-900/40 border-slate-200 pb-4">
+            <div class="flex items-center space-x-2">
+                <button id="tab-month" class="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-md shadow-purple-600/30 transition flex items-center space-x-2 shrink-0">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    <span>Vista Mensual</span>
+                </button>
+                <button id="tab-week" class="px-4 py-2 rounded-xl text-xs font-semibold bg-[#1a1429] dark:bg-[#1a1429] bg-slate-200 text-slate-400 dark:text-slate-400 text-slate-700 hover:text-white transition flex items-center space-x-2 shrink-0">
+                    <i class="fa-solid fa-calendar-week"></i>
+                    <span>Vista Semanal</span>
+                </button>
+            </div>
+
+            <div id="calendar-controls" class="flex items-center space-x-3">
+                <button id="btn-prev" class="w-8 h-8 rounded-xl bg-[#1a1429] dark:bg-[#1a1429] bg-slate-100 border border-purple-900/50 flex items-center justify-center text-purple-300 hover:bg-purple-900/40"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                <h2 id="current-range-label" class="text-sm font-bold text-purple-200 min-w-[180px] text-center">Mes</h2>
+                <button id="btn-next" class="w-8 h-8 rounded-xl bg-[#1a1429] dark:bg-[#1a1429] bg-slate-100 border border-purple-900/50 flex items-center justify-center text-purple-300 hover:bg-purple-900/40"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+            </div>
+        </div>
+
+        <div id="view-month" class="space-y-4">
+            <div class="grid grid-cols-7 gap-2 text-center text-xs font-bold text-purple-400">
+                <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+            </div>
+            <div id="month-grid" class="grid grid-cols-7 gap-2"></div>
+        </div>
+
+        <div id="view-week" class="space-y-4 hidden">
+            <div id="weekly-export-wrapper" class="bg-[#0b0813] dark:bg-[#0b0813] bg-slate-50 p-2 rounded-2xl">
+                <div class="mb-3 hidden print:block text-center">
+                    <h2 class="text-lg font-bold text-purple-900">HitoQuest Calendar - Agenda Semanal</h2>
+                    <p id="pdf-date-subtitle" class="text-xs text-slate-600"></p>
+                </div>
+                <div id="week-grid" class="grid grid-cols-1 sm:grid-cols-7 gap-3"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="hito-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-[#151025] dark:bg-[#151025] bg-white rounded-3xl max-w-lg w-full p-6 border border-purple-800/60 shadow-2xl space-y-4 text-slate-100">
+            <div class="flex justify-between items-center pb-3 border-b border-purple-900/50">
+                <h3 id="modal-title-text" class="text-base font-bold text-purple-300 flex items-center gap-2">
+                    <i class="fa-solid fa-scroll text-purple-400"></i> Nuevo Hito
+                </h3>
+                <button id="btn-close-modal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form id="hito-form" class="space-y-4">
+                <input type="hidden" id="hito-id-input" value="">
+                <div>
+                    <label class="block text-xs font-semibold text-purple-300 mb-1">Nombre del Hito *</label>
+                    <input type="text" id="hito-title-input" required class="w-full px-4 py-2.5 rounded-xl bg-[#1f1836] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-purple-500" placeholder="Ej: Estudiar inglés o Reunión importante">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-purple-300 mb-1">Notas / Descripción</label>
+                    <textarea id="hito-desc-input" rows="2" class="w-full px-4 py-2.5 rounded-xl bg-[#1f1836] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-purple-500 resize-none" placeholder="Detalles de tu hito"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-purple-300 mb-1">Fecha *</label>
+                        <input type="date" id="hito-date-input" required class="w-full px-4 py-2.5 rounded-xl bg-[#1f1836] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-purple-300 mb-1">Hora exacta</label>
+                        <input type="time" id="hito-time-input" value="10:00" class="w-full px-4 py-2.5 rounded-xl bg-[#1f1836] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-purple-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-purple-300 mb-1">Categoría</label>
+                    <select id="hito-category-input" class="w-full px-4 py-2.5 rounded-xl bg-[#1f1836] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-purple-500">
+                        <option value="Personal">👤 Personal</option>
+                        <option value="Salud">❤️ Salud & Deporte</option>
+                        <option value="Trabajo">💼 Trabajo & Estudio</option>
+                        <option value="Finanzas">💰 Finanzas</option>
+                        <option value="Ocio">🎮 Ocio & Creatividad</option>
+                    </select>
+                </div>
+
+                <div class="flex justify-between items-center pt-3 border-t border-purple-900/50">
+                    <button type="button" id="btn-delete-hito" class="px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-950/30 hidden">Eliminar Hito</button>
+                    <div class="flex space-x-2 ml-auto">
+                        <button type="button" id="btn-cancel-modal" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">Cancelar</button>
+                        <button type="submit" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg">Guardar Hito</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Configuración oficial de Firebase con tus credenciales
+        const firebaseConfig = {
+            apiKey: "AIzaSyDL_uSIltx5ozneyftpqGLMqNECqo9J6x8",
+            authDomain: "agenda-bf6ed.firebaseapp.com",
+            projectId: "agenda-bf6ed",
+            storageBucket: "agenda-bf6ed.firebasestorage.app",
+            messagingSenderId: "169272238136",
+            appId: "1:169272238136:web:db8c254762f0968fa506cd"
+        };
+
+        let db = null;
+        let isCloudConnected = false;
+        let gameState = {
+            hitos: [],
+            theme: 'dark'
+        };
+
+        let currentView = 'month';
+        let currentDate = new Date();
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            isCloudConnected = true;
+        } catch(e) {
+            console.error("Error al iniciar Firebase:", e);
+        }
+
+        applyTheme();
+        renderCalendar();
+        initCloudSync();
+
+        function updateSyncStatus(connected, text) {
+            const dot = document.getElementById('sync-status');
+            const label = document.getElementById('sync-text');
+            if (!dot || !label) return;
+            if (connected) {
+                dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+                label.textContent = text || "Nube sincronizada en tiempo real";
+            } else {
+                dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400";
+                label.textContent = text || "Modo local operativo";
+            }
+        }
+
+        function initCloudSync() {
+            if (!db) {
+                updateSyncStatus(false, "Modo local activado");
+                loadFallbackLocal();
+                return;
+            }
+
+            try {
+                db.collection("hitos").onSnapshot((snapshot) => {
+                    const cloudHitos = [];
+                    snapshot.forEach((doc) => {
+                        cloudHitos.push({ id: doc.id, ...doc.data() });
+                    });
+                    gameState.hitos = cloudHitos;
+                    if (gameState.hitos.length === 0) {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        saveHitoToCloud({
+                            title: '¡Bienvenido a HitoQuest Cloud!',
+                            description: 'Tus hitos sincronizados en la nube en tiempo real.',
+                            date: todayStr,
+                            time: '10:00',
+                            category: 'Personal',
+                            completed: false
+                        });
+                    }
+                    updateSyncStatus(true, "Nube sincronizada en tiempo real");
+                    renderCalendar();
+                }, (error) => {
+                    console.warn("Aviso Firestore permission rules:", error);
+                    updateSyncStatus(false, "Verifica tus reglas de Firestore (Permisos)");
+                    loadFallbackLocal();
+                });
+            } catch(e) {
+                console.error("Error configurando sync:", e);
+                updateSyncStatus(false, "Error al conectar con Firestore");
+                loadFallbackLocal();
+            }
+        }
+
+        function loadFallbackLocal() {
+            try {
+                const saved = localStorage.getItem('hitoquest_fallback_data');
+                if (saved) {
+                    gameState.hitos = JSON.parse(saved);
+                } else {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    gameState.hitos = [
+                        { id: 'h_local_1', title: 'Hito local de respaldo', description: 'Revisa tus reglas en Firebase si deseas nube', date: todayStr, time: '09:00', category: 'Personal', completed: false }
+                    ];
+                }
+                renderCalendar();
+            } catch(err) {
+                console.error("Fallback error:", err);
+            }
+        }
+
+        async function saveHitoToCloud(hitoData) {
+            if (db && isCloudConnected) {
+                try {
+                    await db.collection("hitos").add(hitoData);
+                    showToast("¡Hito guardado en la nube!", "success");
+                    return;
+                } catch(e) {
+                    console.error("Error guardando en nube por permisos:", e);
+                }
+            }
+            hitoData.id = 'h_' + Date.now();
+            gameState.hitos.push(hitoData);
+            localStorage.setItem('hitoquest_fallback_data', JSON.stringify(gameState.hitos));
+            renderCalendar();
+            showToast("Hito guardado localmente", "success");
+        }
+
+        async function updateHitoInCloud(id, hitoData) {
+            if (db && isCloudConnected && !id.startsWith('h_local_')) {
+                try {
+                    await db.collection("hitos").doc(id).update(hitoData);
+                    showToast("¡Hito actualizado en la nube!", "success");
+                    return;
+                } catch(e) {
+                    console.error("Error actualizando en nube:", e);
+                }
+            }
+            const idx = gameState.hitos.findIndex(h => h.id === id);
+            if (idx !== -1) {
+                gameState.hitos[idx] = { id, ...hitoData };
+                localStorage.setItem('hitoquest_fallback_data', JSON.stringify(gameState.hitos));
+                renderCalendar();
+                showToast("Hito actualizado localmente", "success");
+            }
+        }
+
+        async function deleteHitoFromCloud(id) {
+            if (db && isCloudConnected && !id.startsWith('h_local_')) {
+                try {
+                    await db.collection("hitos").doc(id).delete();
+                    showToast("Hito eliminado de la nube", "error");
+                    return;
+                } catch(e) {
+                    console.error("Error borrando de nube:", e);
+                }
+            }
+            gameState.hitos = gameState.hitos.filter(h => h.id !== id);
+            localStorage.setItem('hitoquest_fallback_data', JSON.stringify(gameState.hitos));
+            renderCalendar();
+            showToast("Hito eliminado localmente", "error");
+        }
+
+        function applyTheme() {
+            const htmlEl = document.documentElement;
+            const savedTheme = localStorage.getItem('hitoquest_theme') || 'dark';
+            gameState.theme = savedTheme;
+            if (savedTheme === 'light') {
+                htmlEl.classList.remove('dark');
+            } else {
+                htmlEl.classList.add('dark');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bg = type === 'success' ? 'bg-purple-600 border-purple-400' : 'bg-rose-600 border-rose-400';
+            toast.className = `px-4 py-3 rounded-2xl text-xs font-bold text-white shadow-xl border ${bg} flex items-center space-x-2 animate-bounce`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-bell'}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function renderCalendar() {
+            if (currentView === 'month') {
+                const pdfBtn = document.getElementById('btn-export-pdf');
+                if (pdfBtn) pdfBtn.classList.add('hidden');
+                renderMonthView();
+            } else {
+                const pdfBtn = document.getElementById('btn-export-pdf');
+                if (pdfBtn) pdfBtn.classList.remove('hidden');
+                renderWeekView();
+            }
+        }
+
+        function getCategoryBadgeColor(cat) {
+            switch(cat) {
+                case 'Salud': return 'bg-rose-950/60 text-rose-300 border-rose-800/40';
+                case 'Trabajo': return 'bg-blue-950/60 text-blue-300 border-blue-800/40';
+                case 'Finanzas': return 'bg-amber-950/60 text-amber-300 border-amber-800/40';
+                case 'Ocio': return 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40';
+                default: return 'bg-purple-950/60 text-purple-300 border-purple-800/40';
+            }
+        }
+
+        function renderMonthView() {
+            const grid = document.getElementById('month-grid');
+            const label = document.getElementById('current-range-label');
+            if (!grid || !label) return;
+
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            label.textContent = `${monthNames[month]} ${year}`;
+
+            grid.innerHTML = '';
+
+            const firstDayIndex = new Date(year, month, 1).getDay();
+            const adjustedFirstDay = (firstDayIndex === 0) ? 6 : firstDayIndex - 1;
+            const totalDays = new Date(year, month + 1, 0).getDate();
+
+            for (let i = 0; i < adjustedFirstDay; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'bg-[#151025]/30 rounded-2xl min-h-[110px] border border-purple-900/10 opacity-30';
+                grid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= totalDays; day++) {
+                const monthStr = String(month + 1).padStart(2, '0');
+                const dayStr = String(day).padStart(2, '0');
+                const dateKey = `${year}-${monthStr}-${dayStr}`;
+
+                const cell = document.createElement('div');
+                cell.className = 'bg-[#151025] dark:bg-[#151025] bg-white rounded-2xl p-2.5 border border-purple-900/40 dark:border-purple-900/40 border-slate-200 flex flex-col justify-between min-h-[120px] shadow-lg hover:border-purple-600 transition';
+                
+                const dayHitos = gameState.hitos.filter(h => h.date === dateKey);
+
+                let hitosHtml = '';
+                dayHitos.forEach(h => {
+                    const statusClass = h.completed ? 'bg-purple-950/40 border-purple-900/60 line-through text-slate-500' : 'bg-[#1f1836] border-purple-800/50 text-purple-200 hover:border-purple-400';
+                    const catBadge = getCategoryBadgeColor(h.category);
+                    hitosHtml += `
+                        <div class="text-[10px] p-1.5 rounded-xl border ${statusClass} transition mb-1 flex items-center justify-between group">
+                            <div onclick="openEditHito('${h.id}')" class="truncate pr-1 cursor-pointer flex-1">
+                                <span class="font-bold text-purple-400">${h.time || ''}</span> <span class="px-1.5 py-0.2 rounded text-[9px] border ${catBadge}">${h.category || 'Personal'}</span> ${escapeHtml(h.title)}
+                            </div>
+                            <div class="flex items-center space-x-1 shrink-0">
+                                <span onclick="toggleHito('${h.id}')" class="${h.completed ? 'text-purple-400' : 'text-slate-500'} group-hover:text-purple-300 cursor-pointer p-0.5">
+                                    <i class="fa-solid ${h.completed ? 'fa-square-check' : 'fa-square'} text-xs"></i>
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                cell.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-xs font-bold text-purple-300 w-6 h-6 rounded-full bg-purple-950/60 flex items-center justify-center border border-purple-800/40">${day}</span>
+                            <button onclick="openModalForDate('${dateKey}')" class="text-slate-500 hover:text-purple-300 text-[10px] px-1.5 py-0.5 rounded bg-[#1f1836]"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <div class="space-y-1 overflow-y-auto max-h-[85px]">
+                            ${hitosHtml}
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(cell);
+            }
+        }
+
+        function renderWeekView() {
+            const grid = document.getElementById('week-grid');
+            const label = document.getElementById('current-range-label');
+            const pdfSubtitle = document.getElementById('pdf-date-subtitle');
+            if (!grid || !label) return;
+
+            grid.innerHTML = '';
+
+            const d = new Date(currentDate);
+            const dayOfWeek = d.getDay();
+            const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            const monday = new Date(d.setDate(diffToMonday));
+
+            const weekDays = [];
+            for (let i = 0; i < 7; i++) {
+                const nextDay = new Date(monday);
+                nextDay.setDate(monday.getDate() + i);
+                weekDays.push(nextDay);
+            }
+
+            const startStr = `${weekDays[0].getDate()} ${weekDays[0].toLocaleString('es', { month: 'short' })}`;
+            const endStr = `${weekDays[6].getDate()} ${weekDays[6].toLocaleString('es', { month: 'short' })} ${weekDays[6].getFullYear()}`;
+            label.textContent = `${startStr} - ${endStr}`;
+            if (pdfSubtitle) pdfSubtitle.textContent = `Semana del ${startStr} al ${endStr}`;
+
+            weekDays.forEach(dayObj => {
+                const year = dayObj.getFullYear();
+                const monthStr = String(dayObj.getMonth() + 1).padStart(2, '0');
+                const dayStr = String(dayObj.getDate()).padStart(2, '0');
+                const dateKey = `${year}-${monthStr}-${dayStr}`;
+
+                const dayName = dayObj.toLocaleString('es', { weekday: 'long' });
+                const formattedDateName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+
+                const col = document.createElement('div');
+                col.className = 'bg-[#151025] dark:bg-[#151025] bg-white rounded-2xl p-3 border border-purple-900/40 dark:border-purple-900/40 border-slate-200 flex flex-col justify-between min-h-[350px] shadow-lg';
+
+                const dayHitos = gameState.hitos.filter(h => h.date === dateKey);
+                let hitosHtml = '';
+                dayHitos.forEach(h => {
+                    const statusClass = h.completed ? 'bg-purple-950/40 border-purple-900/60 line-through text-slate-500' : 'bg-[#1f1836] border-purple-800/50 text-purple-200 hover:border-purple-400';
+                    const catBadge = getCategoryBadgeColor(h.category);
+                    hitosHtml += `
+                        <div class="text-xs p-2 rounded-xl border ${statusClass} transition mb-2 flex items-center justify-between group">
+                            <div onclick="openEditHito('${h.id}')" class="truncate pr-1 cursor-pointer flex-1">
+                                <div class="flex items-center space-x-1 mb-0.5">
+                                    <span class="font-bold text-purple-400">${h.time || ''}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[9px] border ${catBadge}">${h.category || 'Personal'}</span>
+                                </div>
+                                <span class="text-white">${escapeHtml(h.title)}</span>
+                            </div>
+                            <span onclick="toggleHito('${h.id}')" class="${h.completed ? 'text-purple-400' : 'text-slate-500'} group-hover:text-purple-300 text-sm cursor-pointer shrink-0 p-1">
+                                <i class="fa-solid ${h.completed ? 'fa-square-check' : 'fa-square'}"></i>
+                            </span>
+                        </div>
+                    `;
+                });
+
+                col.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-3 pb-2 border-b border-purple-900/40">
+                            <div>
+                                <span class="text-xs font-bold text-purple-400 uppercase">${formattedDateName}</span>
+                                <h4 class="text-sm font-bold text-white">${dayObj.getDate()} / ${dayObj.getMonth() + 1}</h4>
+                            </div>
+                            <button onclick="openModalForDate('${dateKey}')" class="w-7 h-7 rounded-xl bg-[#1f1836] border border-purple-900/50 flex items-center justify-center text-purple-300 hover:bg-purple-900/40"><i class="fa-solid fa-plus text-xs"></i></button>
+                        </div>
+                        <div class="space-y-2 overflow-y-auto max-h-[300px]">
+                            ${hitosHtml.length ? hitosHtml : '<p class="text-xs text-slate-500 italic text-center py-4">Sin hitos este día</p>'}
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(col);
+            });
+        }
+
+        window.openModalForDate = function(dateStr) {
+            document.getElementById('modal-title-text').innerHTML = '<i class="fa-solid fa-scroll text-purple-400"></i> Nuevo Hito';
+            document.getElementById('hito-id-input').value = '';
+            document.getElementById('hito-title-input').value = '';
+            document.getElementById('hito-desc-input').value = '';
+            document.getElementById('hito-date-input').value = dateStr;
+            document.getElementById('hito-time-input').value = '10:00';
+            document.getElementById('hito-category-input').value = 'Personal';
+            document.getElementById('btn-delete-hito').classList.add('hidden');
+            document.getElementById('hito-modal').classList.remove('hidden');
+        };
+
+        window.openEditHito = function(id) {
+            const h = gameState.hitos.find(item => item.id === id);
+            if (!h) return;
+
+            document.getElementById('modal-title-text').innerHTML = '<i class="fa-solid fa-pen-to-square text-purple-400"></i> Editar Hito';
+            document.getElementById('hito-id-input').value = h.id;
+            document.getElementById('hito-title-input').value = h.title;
+            document.getElementById('hito-desc-input').value = h.description || '';
+            document.getElementById('hito-date-input').value = h.date;
+            document.getElementById('hito-time-input').value = h.time || '10:00';
+            document.getElementById('hito-category-input').value = h.category || 'Personal';
+            document.getElementById('btn-delete-hito').classList.remove('hidden');
+            document.getElementById('hito-modal').classList.remove('hidden');
+        };
+
+        window.toggleHito = function(id) {
+            const quest = gameState.hitos.find(h => h.id === id);
+            if (!quest) return;
+
+            const newCompletedState = !quest.completed;
+            updateHitoInCloud(id, { ...quest, completed: newCompletedState });
+        };
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeBtn = document.getElementById('btn-toggle-theme');
+            if (themeBtn) {
+                themeBtn.onclick = () => {
+                    const newTheme = gameState.theme === 'dark' ? 'light' : 'dark';
+                    gameState.theme = newTheme;
+                    localStorage.setItem('hitoquest_theme', newTheme);
+                    applyTheme();
+                };
+            }
+
+            const pdfExportBtn = document.getElementById('btn-export-pdf');
+            if (pdfExportBtn) {
+                pdfExportBtn.onclick = () => {
+                    const element = document.getElementById('weekly-export-wrapper');
+                    const opt = {
+                        margin: 10,
+                        filename: 'agenda-semanal-hitoquest.pdf',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                    };
+                    showToast("Generando PDF de la semana...", "success");
+                    html2pdf().from(element).set(opt).save();
+                };
+            }
+
+            const tabMonth = document.getElementById('tab-month');
+            const tabWeek = document.getElementById('tab-week');
+            if (tabMonth && tabWeek) {
+                tabMonth.onclick = () => {
+                    currentView = 'month';
+                    document.getElementById('view-month').classList.remove('hidden');
+                    document.getElementById('view-week').classList.add('hidden');
+                    tabMonth.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-md shadow-purple-600/30 transition flex items-center space-x-2 shrink-0';
+                    tabWeek.className = 'px-4 py-2 rounded-xl text-xs font-semibold bg-[#1a1429] bg-slate-200 text-slate-400 hover:text-white transition flex items-center space-x-2 shrink-0';
+                    renderCalendar();
+                };
+
+                tabWeek.onclick = () => {
+                    currentView = 'week';
+                    document.getElementById('view-week').classList.remove('hidden');
+                    document.getElementById('view-month').classList.add('hidden');
+                    tabWeek.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-md shadow-purple-600/30 transition flex items-center space-x-2 shrink-0';
+                    tabMonth.className = 'px-4 py-2 rounded-xl text-xs font-semibold bg-[#1a1429] bg-slate-200 text-slate-400 hover:text-white transition flex items-center space-x-2 shrink-0';
+                    renderCalendar();
+                };
+            }
+
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            if (btnPrev && btnNext) {
+                btnPrev.onclick = () => {
+                    if (currentView === 'month') {
+                        currentDate.setMonth(currentDate.getMonth() - 1);
+                    } else {
+                        currentDate.setDate(currentDate.getDate() - 7);
+                    }
+                    renderCalendar();
+                };
+
+                btnNext.onclick = () => {
+                    if (currentView === 'month') {
+                        currentDate.setMonth(currentDate.getMonth() + 1);
+                    } else {
+                        currentDate.setDate(currentDate.getDate() + 7);
+                    }
+                    renderCalendar();
+                };
+            }
+
+            const hitoModal = document.getElementById('hito-modal');
+            const openModalBtn = document.getElementById('btn-open-new-hito');
+            const closeModalBtn = document.getElementById('btn-close-modal');
+            const cancelModalBtn = document.getElementById('btn-cancel-modal');
+            const deleteHitoBtn = document.getElementById('btn-delete-hito');
+            const hitoForm = document.getElementById('hito-form');
+
+            if (openModalBtn) {
+                openModalBtn.onclick = () => {
+                    openModalForDate(new Date().toISOString().split('T')[0]);
+                };
+            }
+            if (closeModalBtn) closeModalBtn.onclick = () => hitoModal.classList.add('hidden');
+            if (cancelModalBtn) cancelModalBtn.onclick = () => hitoModal.classList.add('hidden');
+
+            if (deleteHitoBtn) {
+                deleteHitoBtn.onclick = () => {
+                    const id = document.getElementById('hito-id-input').value;
+                    if (!id) return;
+                    deleteHitoFromCloud(id);
+                    hitoModal.classList.add('hidden');
+                };
+            }
+
+            if (hitoForm) {
+                hitoForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    const id = document.getElementById('hito-id-input').value;
+                    const title = document.getElementById('hito-title-input').value;
+                    const desc = document.getElementById('hito-desc-input').value;
+                    const date = document.getElementById('hito-date-input').value;
+                    const time = document.getElementById('hito-time-input').value;
+                    const category = document.getElementById('hito-category-input').value || 'Personal';
+
+                    if (id) {
+                        const existing = gameState.hitos.find(item => item.id === id);
+                        updateHitoInCloud(id, {
+                            title,
+                            description: desc,
+                            date,
+                            time,
+                            category,
+                            completed: existing ? existing.completed : false
+                        });
+                    } else {
+                        saveHitoToCloud({
+                            title,
+                            description: desc,
+                            date,
+                            time,
+                            category,
+                            completed: false
+                        });
+                    }
+
+                    hitoModal.classList.add('hidden');
+                };
+            }
+        });
+    </script>
+</body>
+</html>
